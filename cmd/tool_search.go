@@ -119,15 +119,18 @@ func printRegistryToolMatches(tools []registryToolRecord) {
 }
 
 func (tool registryToolRecord) InstallID() string {
+	path := strings.TrimSpace(tool.Path)
+	if path != "" {
+		return strings.TrimSuffix(path, ".xrmcp.json")
+	}
+
 	category := strings.TrimSpace(tool.Category)
 	name := strings.TrimSpace(tool.Name)
 	if category != "" && name != "" {
 		return category + "/" + name
 	}
 
-	path := strings.TrimSpace(tool.Path)
-	path = strings.TrimSuffix(path, ".xrmcp.json")
-	return path
+	return name
 }
 
 func (tool registryToolRecord) DescriptionOrFallback() string {
