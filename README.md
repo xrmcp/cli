@@ -21,6 +21,13 @@ Verify downloads with `sha256sums.txt`.
 
 ### Linux
 
+#### Homebrew
+
+```sh
+brew tap xrmcp/homebrew-tap
+brew install xrmcp
+```
+
 #### Debian/Ubuntu
 
 Download the matching `.deb` package from GitHub Releases and install it:
