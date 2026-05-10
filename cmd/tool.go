@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 
 var toolURL string
 var toolLsDesc bool
+
+const registryManifestBaseURL = "https://raw.githubusercontent.com/xrmcp/registry/main/xrmcp-registry/tools"
 
 var toolCmd = &cobra.Command{
 	Use:   "tool",
@@ -29,10 +32,19 @@ var toolLsCmd = &cobra.Command{
 }
 
 var toolInstallCmd = &cobra.Command{
-	Use:   "install <manifest>",
-	Short: "Register a tool from a manifest JSON file",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runToolInstall,
+	Use:     "install <arg>",
+	Aliases: []string{"i"},
+	Short:   "Register a tool from a local manifest or registry identifier",
+	Args:    cobra.ExactArgs(1),
+	RunE:    runToolInstall,
+}
+
+var toolSearchCmd = &cobra.Command{
+	Use:     "search <keyword>",
+	Short:   "Search registry tools by keyword",
+	Aliases: []string{"s"},
+	Args:    cobra.MinimumNArgs(1),
+	RunE:    runToolSearch,
 }
 
 var toolUninstallCmd = &cobra.Command{
@@ -48,7 +60,7 @@ func init() {
 	toolInstallCmd.Flags().StringVar(&toolURL, "url", "", "xrMCP server base URL (default: XRMCP_SERVER_URL or http://localhost:7373)")
 	toolUninstallCmd.Flags().StringVar(&toolURL, "url", "", "xrMCP server base URL (default: XRMCP_SERVER_URL or http://localhost:7373)")
 
-	toolCmd.AddCommand(toolLsCmd, toolInstallCmd, toolUninstallCmd)
+	toolCmd.AddCommand(toolLsCmd, toolInstallCmd, toolSearchCmd, toolUninstallCmd)
 	rootCmd.AddCommand(toolCmd)
 }
 
@@ -60,6 +72,23 @@ type listResponse struct {
 		RegisteredAt string         `json:"registeredAt"`
 		Metadata     map[string]any `json:"metadata"`
 	} `json:"tools"`
+}
+
+type installManifest struct {
+	Tool   map[string]any `json:"tool"`
+	Config map[string]any `json:"config"`
+}
+
+type installResponse struct {
+	Name   string   `json:"name"`
+	Status string   `json:"status"`
+	Errors []string `json:"errors"`
+}
+
+type installSource struct {
+	Kind   string
+	Label  string
+	Target string
 }
 
 func runToolLs(cmd *cobra.Command, args []string) error {
@@ -122,10 +151,28 @@ func runToolLs(cmd *cobra.Command, args []string) error {
 }
 
 func runToolInstall(cmd *cobra.Command, args []string) error {
-	manifestPath := args[0]
-	data, err := os.ReadFile(manifestPath)
+	manifest, source, err := loadInstallManifest(args[0])
 	if err != nil {
-		log.Fatalf("cannot read manifest: %v", err)
+		log.Fatalf("cannot load manifest: %v", err)
+	}
+
+	if manifest.Tool == nil {
+		log.Fatalf("manifest is missing the top-level tool block")
+	}
+
+	config, err := collectInstallConfig(manifest, source)
+	if err != nil {
+		log.Fatalf("cannot collect config: %v", err)
+	}
+
+	payload := map[string]any{
+		"tool":   manifest.Tool,
+		"config": config,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalf("cannot encode install payload: %v", err)
 	}
 
 	url := serverURL(toolURL) + "/tools/register"
@@ -137,11 +184,7 @@ func runToolInstall(cmd *cobra.Command, args []string) error {
 
 	body, _ := io.ReadAll(resp.Body)
 
-	var result struct {
-		Name   string   `json:"name"`
-		Status string   `json:"status"`
-		Errors []string `json:"errors"`
-	}
+	var result installResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		fmt.Println(string(body))
 		os.Exit(1)
@@ -160,6 +203,158 @@ func runToolInstall(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 	return nil
+}
+
+func loadInstallManifest(arg string) (installManifest, installSource, error) {
+	if strings.HasSuffix(arg, ".xrmcp.json") {
+		data, err := os.ReadFile(arg)
+		if err != nil {
+			return installManifest{}, installSource{}, err
+		}
+		return decodeInstallManifest(data, installSource{
+			Kind:   "local",
+			Label:  "local file",
+			Target: arg,
+		})
+	}
+
+	parts := strings.Split(arg, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return installManifest{}, installSource{}, fmt.Errorf("registry install expects <category>/<tool_name>, got %q", arg)
+	}
+
+	manifestURL := fmt.Sprintf("%s/%s/%s.xrmcp.json", registryManifestBaseURL, parts[0], parts[1])
+	resp, err := http.Get(manifestURL) //nolint:noctx
+	if err != nil {
+		return installManifest{}, installSource{}, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return installManifest{}, installSource{}, fmt.Errorf("registry fetch failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	return decodeInstallManifest(body, installSource{
+		Kind:   "registry",
+		Label:  "registry",
+		Target: arg,
+	})
+}
+
+func decodeInstallManifest(data []byte, source installSource) (installManifest, installSource, error) {
+	var manifest installManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return installManifest{}, installSource{}, err
+	}
+	return manifest, source, nil
+}
+
+func collectInstallConfig(manifest installManifest, source installSource) (map[string]any, error) {
+	configSchema, _ := manifest.Tool["configSchema"].(map[string]any)
+	properties, _ := configSchema["properties"].(map[string]any)
+	if len(properties) == 0 {
+		if manifest.Config != nil {
+			return manifest.Config, nil
+		}
+		return map[string]any{}, nil
+	}
+
+	required := jsonStringSlice(configSchema["required"])
+	defaults := manifest.Config
+	if defaults == nil {
+		defaults = map[string]any{}
+	}
+
+	interactive := canPromptInteractively()
+	if interactive {
+		printInstallHeader(manifest, source)
+		printSecretsNote(manifest)
+	}
+
+	return promptConfigFields(properties, required, defaults, "", interactive)
+}
+
+func hasNestedProperties(prop map[string]any) bool {
+	if schemaType(prop) != "object" {
+		return false
+	}
+	return len(childProperties(prop)) > 0
+}
+
+func childProperties(prop map[string]any) map[string]any {
+	properties, _ := prop["properties"].(map[string]any)
+	return properties
+}
+
+func schemaType(prop map[string]any) string {
+	if value, ok := prop["type"].(string); ok {
+		return value
+	}
+	if values, ok := prop["type"].([]any); ok {
+		for _, candidate := range values {
+			value, ok := candidate.(string)
+			if !ok || value == "null" {
+				continue
+			}
+			return value
+		}
+	}
+	return ""
+}
+
+func isSecretConfigField(name string, prop map[string]any) bool {
+	if value, ok := prop["format"].(string); ok && strings.EqualFold(value, "password") {
+		return true
+	}
+	if value, ok := prop["x-secret"].(bool); ok && value {
+		return true
+	}
+
+	desc, _ := prop["description"].(string)
+	text := strings.ToLower(name + " " + desc)
+	for _, marker := range []string{"secret", "password", "token", "private key", "api key", "apikey"} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func canPromptInteractively() bool {
+	stdinInfo, err := os.Stdin.Stat()
+	if err != nil || (stdinInfo.Mode()&os.ModeCharDevice) == 0 {
+		return false
+	}
+
+	stdoutInfo, err := os.Stdout.Stat()
+	if err != nil || (stdoutInfo.Mode()&os.ModeCharDevice) == 0 {
+		return false
+	}
+
+	return true
+}
+
+func nestedString(values map[string]any, key string) string {
+	value, _ := values[key].(string)
+	return value
+}
+
+func jsonStringSlice(value any) []string {
+	rawValues, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+
+	out := make([]string, 0, len(rawValues))
+	for _, raw := range rawValues {
+		text, ok := raw.(string)
+		if !ok || text == "" {
+			continue
+		}
+		out = append(out, text)
+	}
+	return out
 }
 
 func runToolUninstall(cmd *cobra.Command, args []string) error {

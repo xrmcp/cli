@@ -1,0 +1,123 @@
+version: 2
+
+project_name: xrmcp
+
+release:
+  github:
+    owner: xrmcp
+    name: cli
+
+builds:
+  - id: xrmcp-darwin
+    main: .
+    binary: xrmcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+  - id: xrmcp-linux
+    main: .
+    binary: xrmcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+  - id: xrmcp-windows
+    main: .
+    binary: xrmcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+archives:
+  - id: release-archives
+    ids:
+      - xrmcp-darwin
+      - xrmcp-linux
+      - xrmcp-windows
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: true
+    files:
+      - README.md
+
+checksum:
+  name_template: sha256sums.txt
+  algorithm: sha256
+
+nfpms:
+  - id: linux-deb
+    ids:
+      - xrmcp-linux
+    package_name: xrmcp
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Arch }}"
+    homepage: https://github.com/xrmcp/cli
+    description: Go CLI for managing and running the xrMCP runtime server.
+    maintainer: xrMCP Maintainers <opensource@xrmcp.dev>
+    vendor: xrmcp
+    section: utils
+    priority: optional
+    bindir: /usr/bin
+    formats:
+      - deb
+
+brews:
+  - name: xrmcp
+    ids:
+      - release-archives
+    directory: Formula
+    homepage: https://github.com/xrmcp/cli
+    description: Go CLI for managing and running the xrMCP runtime server.
+    repository:
+      owner: xrmcp
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+    test: |
+      system "#{bin}/xrmcp", "--help"
+
+scoops:
+  - name: xrmcp
+    ids:
+      - release-archives
+    homepage: https://github.com/xrmcp/cli
+    description: Go CLI for managing and running the xrMCP runtime server.
+    repository:
+      owner: xrmcp
+      name: scoop-bucket
+      branch: main
+      token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
