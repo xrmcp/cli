@@ -17,6 +17,7 @@ import (
 
 var toolURL string
 var toolLsDesc bool
+var toolToken string
 
 const registryManifestBaseURL = "https://raw.githubusercontent.com/xrmcp/registry/main/xrmcp-registry/tools"
 
@@ -57,8 +58,11 @@ var toolUninstallCmd = &cobra.Command{
 func init() {
 	toolLsCmd.Flags().StringVar(&toolURL, "url", "", "xrMCP server base URL (default: XRMCP_SERVER_URL or http://localhost:7373)")
 	toolLsCmd.Flags().BoolVarP(&toolLsDesc, "desc", "d", false, "Show description column")
+	toolLsCmd.Flags().StringVar(&toolToken, "token", "", "Bearer token for protected xrMCP admin API endpoints")
 	toolInstallCmd.Flags().StringVar(&toolURL, "url", "", "xrMCP server base URL (default: XRMCP_SERVER_URL or http://localhost:7373)")
+	toolInstallCmd.Flags().StringVar(&toolToken, "token", "", "Bearer token for protected xrMCP admin API endpoints")
 	toolUninstallCmd.Flags().StringVar(&toolURL, "url", "", "xrMCP server base URL (default: XRMCP_SERVER_URL or http://localhost:7373)")
+	toolUninstallCmd.Flags().StringVar(&toolToken, "token", "", "Bearer token for protected xrMCP admin API endpoints")
 
 	toolCmd.AddCommand(toolLsCmd, toolInstallCmd, toolSearchCmd, toolUninstallCmd)
 	rootCmd.AddCommand(toolCmd)
@@ -91,9 +95,25 @@ type installSource struct {
 	Target string
 }
 
+func printUnauthorizedToolError(token string) {
+	if strings.TrimSpace(token) != "" {
+		fmt.Fprintln(os.Stderr, "error: xrMCP server rejected the provided bearer token")
+		fmt.Fprintln(os.Stderr, "hint: verify --token or XRMCP_API_TOKEN")
+		return
+	}
+	fmt.Fprintln(os.Stderr, "error: xrMCP server requires a bearer token")
+	fmt.Fprintln(os.Stderr, "hint: provide --token or set XRMCP_API_TOKEN")
+}
+
 func runToolLs(cmd *cobra.Command, args []string) error {
 	url := serverURL(toolURL) + "/tools/list-installed"
-	resp, err := http.Get(url) //nolint:noctx
+	token := resolveAPIToken(toolToken)
+	req, err := newAPIRequest(http.MethodGet, url, token, nil)
+	if err != nil {
+		log.Fatalf("failed to build request: %v", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Fatalf("request failed: %v", err)
 	}
@@ -101,6 +121,10 @@ func runToolLs(cmd *cobra.Command, args []string) error {
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == http.StatusUnauthorized {
+			printUnauthorizedToolError(token)
+			os.Exit(1)
+		}
 		fmt.Fprintf(os.Stderr, "error %d: %s\n", resp.StatusCode, body)
 		os.Exit(1)
 	}
@@ -176,13 +200,24 @@ func runToolInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	url := serverURL(toolURL) + "/tools/register"
-	resp, err := http.Post(url, "application/json", bytes.NewReader(data)) //nolint:noctx
+	token := resolveAPIToken(toolToken)
+	req, err := newAPIRequest(http.MethodPost, url, token, bytes.NewReader(data))
+	if err != nil {
+		log.Fatalf("failed to build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusUnauthorized {
+		printUnauthorizedToolError(token)
+		os.Exit(1)
+	}
 
 	var result installResponse
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -360,8 +395,9 @@ func jsonStringSlice(value any) []string {
 func runToolUninstall(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	url := serverURL(toolURL) + "/tools/" + name
+	token := resolveAPIToken(toolToken)
 
-	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	req, err := newAPIRequest(http.MethodDelete, url, token, nil)
 	if err != nil {
 		log.Fatalf("failed to build request: %v", err)
 	}
@@ -378,6 +414,9 @@ func runToolUninstall(cmd *cobra.Command, args []string) error {
 		fmt.Printf("✓ Uninstalled: %s\n", name)
 	case http.StatusNotFound:
 		fmt.Fprintf(os.Stderr, "✗ Not found: %s\n", name)
+		os.Exit(1)
+	case http.StatusUnauthorized:
+		printUnauthorizedToolError(token)
 		os.Exit(1)
 	default:
 		fmt.Fprintf(os.Stderr, "✗ Unexpected status %d for: %s\n", resp.StatusCode, name)

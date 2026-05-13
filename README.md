@@ -96,6 +96,13 @@ xrmcp server start [flags]
 
 Flags take precedence over values in the `.env` file. Supported env vars: `XRMCP_TRANSPORT`, `XRMCP_ADDR`, `XRMCP_STORE_PATH`.
 
+REST management auth is env-driven:
+
+- `XRMCP_API_AUTH_MODE=none|bearer`
+- `XRMCP_API_TOKEN=<token>`
+
+If neither is set, runtime startup warns that the REST admin API is running in development mode without auth.
+
 **Examples:**
 
 ```sh
@@ -104,6 +111,9 @@ xrmcp server start
 
 # HTTP mode — REST + MCP Streamable HTTP on :8080
 xrmcp server start -t http -p 8080
+
+# HTTP mode with bearer auth enabled
+XRMCP_API_AUTH_MODE=bearer XRMCP_API_TOKEN=my-secret-token xrmcp server start -t http -p 8080
 
 # Load custom .env and persist tools
 xrmcp server start --env /path/to/.env -s /path/to/tools.json
@@ -116,10 +126,13 @@ xrmcp server start --env /path/to/.env -s /path/to/tools.json
 List tools installed on the running server.
 
 ```sh
-xrmcp tool ls [--url <base-url>]
+xrmcp tool ls [--url <base-url>] [--token <token>]
 ```
 
-Env var fallback: `XRMCP_SERVER_URL` (default: `http://localhost:7373`).
+Env var fallback:
+
+- `XRMCP_SERVER_URL` for the runtime base URL
+- `XRMCP_API_TOKEN` for bearer auth
 
 ---
 
@@ -128,7 +141,7 @@ Env var fallback: `XRMCP_SERVER_URL` (default: `http://localhost:7373`).
 Register a tool from a local manifest JSON file or registry identifier.
 
 ```sh
-xrmcp tool install ./registry/tools/my-tool.xrmcp.json
+xrmcp tool install ./registry/tools/my-tool.xrmcp.json --token my-secret-token
 ```
 
 You can also install directly from the official registry:
@@ -157,7 +170,51 @@ xrmcp tool search project
 Uninstall a tool by name.
 
 ```sh
-xrmcp tool uninstall my-tool
+xrmcp tool uninstall my-tool --token my-secret-token
+```
+
+---
+
+### `xrmcp manifest generate`
+
+Generate xrMCP `ToolRegistration` manifest files from external sources.
+
+Current supported source:
+
+- Postman collection JSON
+
+```sh
+xrmcp manifest generate --from postman --in ./collection.json --out ./generated-tools
+```
+
+Short flags:
+
+```sh
+xrmcp manifest generate -f postman -i ./collection.json -o ./generated-tools
+```
+
+Inspect bindings only:
+
+```sh
+xrmcp manifest generate -f postman -i ./collection.json -b
+```
+
+Behavior:
+
+- reads a Postman collection export
+- walks nested Postman folders recursively
+- writes one `.xrmcp.json` file per request
+- mirrors folder structure under the output directory
+- generates xrMCP `ToolRegistration` documents, not a bundle
+- analyzes both explicit bindings and liftable literal values from auth, URLs, query params, and request bodies
+- `--binding-only` prints discovered bindings/literal candidates, locations, inferred classifications, and reasoning without generating files
+
+Example output:
+
+```text
+generated-tools/issues/get_ticket.xrmcp.json
+generated-tools/issues/add_comment.xrmcp.json
+generated-tools/projects/list_projects.xrmcp.json
 ```
 
 ---
@@ -170,6 +227,8 @@ xrmcp tool uninstall my-tool
 | `XRMCP_ADDR` | Listen address, e.g. `:7373` |
 | `XRMCP_STORE_PATH` | Path to the tool registry JSON file |
 | `XRMCP_SERVER_URL` | Base URL for `tool` subcommands (default `http://localhost:7373`) |
+| `XRMCP_API_AUTH_MODE` | REST admin auth mode: `none` or `bearer` |
+| `XRMCP_API_TOKEN` | Bearer token for protected runtime admin endpoints and CLI tool commands |
 
 ## Release automation
 

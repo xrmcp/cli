@@ -9,6 +9,8 @@ require (
 	github.com/xrmcp/go-sdk v0.1.0
 )
 
+replace github.com/xrmcp/go-sdk => ../go-sdk
+
 require (
 	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/PaesslerAG/jsonpath v0.1.1 // indirect
