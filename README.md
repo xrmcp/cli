@@ -45,7 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/xrmcp/cli/main/install.sh | sh
 Pin a specific version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/xrmcp/cli/main/install.sh | sh -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/xrmcp/cli/main/install.sh | sh -s -- --version v0.1.1
 ```
 
 #### Manual install
@@ -78,6 +78,26 @@ go build -o xrmcp .
 ```
 
 ## Commands
+
+### `xrmcp version`
+
+Show the CLI, spec, and Go SDK versions.
+
+```sh
+xrmcp version
+xrmcp --version
+xrmcp -v
+```
+
+Example output:
+
+```text
+spec: xrmcp.v0.1.0
+xrmcp/go-sdk: v0.1.1
+xrmcp/cli: v0.1.1
+```
+
+---
 
 ### `xrmcp server start`
 
@@ -193,29 +213,38 @@ Short flags:
 xrmcp manifest generate -f postman -i ./collection.json -o ./generated-tools
 ```
 
-Inspect bindings only:
+> [!NOTE]
+> Postman import is still experimental.
+>
+> Review each generated manifest carefully before installing it or using it in production. Postman collections often contain environment-specific assumptions, auth shortcuts, sample literals, or request patterns that cannot always be converted perfectly.
+>
+> Bulk install from a generated folder is intentionally not supported yet. The expected flow is to inspect each generated `.xrmcp.json` file first, then install only the manifests you approve.
+
+
+
+---
+
+### `xrmcp manifest new`
+
+Create a minimal xrMCP manifest scaffold.
 
 ```sh
-xrmcp manifest generate -f postman -i ./collection.json -b
+xrmcp manifest new ./my-tool
+xrmcp manifest new ./tools/jira/get_jira_ticket.xrmcp.json
 ```
 
-Behavior:
 
-- reads a Postman collection export
-- walks nested Postman folders recursively
-- writes one `.xrmcp.json` file per request
-- mirrors folder structure under the output directory
-- generates xrMCP `ToolRegistration` documents, not a bundle
-- analyzes both explicit bindings and liftable literal values from auth, URLs, query params, and request bodies
-- `--binding-only` prints discovered bindings/literal candidates, locations, inferred classifications, and reasoning without generating files
+---
 
-Example output:
+### `xrmcp manifest validate`
 
-```text
-generated-tools/issues/get_ticket.xrmcp.json
-generated-tools/issues/add_comment.xrmcp.json
-generated-tools/projects/list_projects.xrmcp.json
+Validate a local xrMCP manifest file.
+
+```sh
+xrmcp manifest validate ./tools/jira/get_jira_ticket.xrmcp.json
 ```
+
+The command validates the local file against the current xrMCP manifest schema and prints either a short success message or readable validation errors.
 
 ---
 

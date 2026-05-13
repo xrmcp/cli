@@ -858,27 +858,27 @@ func renderBindingReport(analysis bindingAnalysis) string {
 				fmt.Fprintf(&b, "- %s\n", reason)
 			}
 		}
-		fmt.Fprintf(&b, "Occurrences:\n")
-		for _, occ := range record.Occurrences {
-			location := occ.Location.Area
-			if occ.Location.URLPart != "" {
-				location += "/" + occ.Location.URLPart
-			}
-			if occ.Location.BodyMode != "" {
-				location += " bodyMode=" + occ.Location.BodyMode
-			}
-			if occ.Location.AuthType != "" {
-				location += " authType=" + occ.Location.AuthType
-			}
-			fmt.Fprintf(&b, "- request=%s location=%s syntax=%s", occ.RequestPath, location, occ.Syntax)
-			if occ.Key != "" {
-				fmt.Fprintf(&b, " key=%s", occ.Key)
-			}
-			if occ.ValueSample != "" {
-				fmt.Fprintf(&b, " sample=%q", occ.ValueSample)
-			}
-			fmt.Fprintln(&b)
-		}
+		// fmt.Fprintf(&b, "Occurrences:\n")
+		// for _, occ := range record.Occurrences {
+		// 	location := occ.Location.Area
+		// 	if occ.Location.URLPart != "" {
+		// 		location += "/" + occ.Location.URLPart
+		// 	}
+		// 	if occ.Location.BodyMode != "" {
+		// 		location += " bodyMode=" + occ.Location.BodyMode
+		// 	}
+		// 	if occ.Location.AuthType != "" {
+		// 		location += " authType=" + occ.Location.AuthType
+		// 	}
+		// 	fmt.Fprintf(&b, "- request=%s location=%s syntax=%s", occ.RequestPath, location, occ.Syntax)
+		// 	if occ.Key != "" {
+		// 		fmt.Fprintf(&b, " key=%s", occ.Key)
+		// 	}
+		// 	if occ.ValueSample != "" {
+		// 		fmt.Fprintf(&b, " sample=%q", occ.ValueSample)
+		// 	}
+		// 	fmt.Fprintln(&b)
+		// }
 		fmt.Fprintln(&b)
 	}
 	return strings.TrimRight(b.String(), "\n")

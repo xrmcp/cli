@@ -6,10 +6,8 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/manifoldco/promptui v0.9.0
 	github.com/spf13/cobra v1.9.1
-	github.com/xrmcp/go-sdk v0.1.0
+	github.com/xrmcp/go-sdk v0.1.1
 )
-
-replace github.com/xrmcp/go-sdk => ../go-sdk
 
 require (
 	github.com/PaesslerAG/gval v1.0.0 // indirect

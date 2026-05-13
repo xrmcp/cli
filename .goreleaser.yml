@@ -21,7 +21,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w
+      - -s -w -X github.com/xrmcp/cli/cmd.cliVersion={{ .Version }}
 
   - id: xrmcp-linux
     main: .
@@ -36,7 +36,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w
+      - -s -w -X github.com/xrmcp/cli/cmd.cliVersion={{ .Version }}
 
   - id: xrmcp-windows
     main: .
@@ -50,7 +50,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w
+      - -s -w -X github.com/xrmcp/cli/cmd.cliVersion={{ .Version }}
 
 archives:
   - id: release-archives

@@ -226,13 +226,13 @@ func TestAnalyzePostmanBindingsReport(t *testing.T) {
 	for _, expected := range []string{
 		"Binding: baseUrl",
 		"Classified as: config",
-		"location=url/host",
 		"Binding: apiToken",
 		"Classified as: secret",
-		"location=header",
 		"Binding: userId",
 		"Classified as: input",
-		"syntax=:userId",
+		"Binding: workspaceId",
+		"Classified as: input",
+		"Why:",
 	} {
 		if !strings.Contains(report, expected) {
 			t.Fatalf("expected report to contain %q\n%s", expected, report)

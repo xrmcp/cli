@@ -22,14 +22,16 @@ var toolToken string
 const registryManifestBaseURL = "https://raw.githubusercontent.com/xrmcp/registry/main/xrmcp-registry/tools"
 
 var toolCmd = &cobra.Command{
-	Use:   "tool",
-	Short: "Manage xrMCP tools",
+	Use:     "tool",
+	Aliases: []string{"t"},
+	Short:   "Manage xrMCP tools",
 }
 
 var toolLsCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List installed tools",
-	RunE:  runToolLs,
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List installed tools",
+	RunE:    runToolLs,
 }
 
 var toolInstallCmd = &cobra.Command{
